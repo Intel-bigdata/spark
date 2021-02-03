@@ -24,7 +24,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.util.{ArrayList, Collections, Enumeration, List}
 
-import org.apache.spark.io.pmem.PlasmaInputStream
+import org.apache.spark.io.pmem.{PlasmaInputStream, PlasmaUtils}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.AbstractFileRegion
 import org.apache.spark.network.util.TransportConf
@@ -32,6 +32,7 @@ import org.apache.spark.network.util.TransportConf
 private[spark] class PlasmaInputSteamManagedBuffer(transportConf: TransportConf)
   extends ManagedBuffer {
   private val streams: List[PlasmaInputStream] = new ArrayList[PlasmaInputStream]
+  private val streamIds: List[String] = new ArrayList[String]
   private val curStreamIdx: Int = 0
   private var totalLength: Long = 0L
 
@@ -40,9 +41,21 @@ private[spark] class PlasmaInputSteamManagedBuffer(transportConf: TransportConf)
   }
 
   override def nioByteBuffer(): ByteBuffer = {
-    // TODO:wait PlasmaInputStream to add getByteBuffer()
-    // which returns a DirectByteBuffer
-    null
+    // For current API in PlasmaUtils.getObjAsByteBuffer(),
+    // we need to concatenate all the ByteBuffers of all the PlasmaInputStream
+    import scala.collection.JavaConverters._
+    var length = 0;
+    var bbs = new ArrayList[ByteBuffer]()
+    for ( streamId <- streamIds.asScala) {
+      val bb = PlasmaUtils.getObjAsByteBuffer(streamId)
+      bbs.add(bb)
+      length += bb.remaining()
+    }
+    val concatBb = ByteBuffer.allocate(length)
+    for ( binStream : ByteBuffer <- bbs.asScala) {
+      concatBb.put(binStream)
+    }
+    concatBb
   }
 
   override def createInputStream(): InputStream = {
@@ -60,7 +73,8 @@ private[spark] class PlasmaInputSteamManagedBuffer(transportConf: TransportConf)
   }
 
   @throws[IOException]
-  def addStream(stream: PlasmaInputStream): Unit = {
+  def addStream(streamObjId: String, stream: PlasmaInputStream): Unit = {
+    streamIds.add(streamObjId)
     streams.add(stream)
     totalLength += stream.available()
   }

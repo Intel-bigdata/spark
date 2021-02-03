@@ -51,7 +51,7 @@ private[spark] class PlasmaShuffleBlockResolver(
     for (idx <- startReduceId to endReduceId) {
       val shuffleObjId = PlasmaShuffleUtil.generateShuffleId(shuffleId, mapId, idx)
       val in = new PlasmaInputStream(shuffleObjId)
-      resultBuffer.addStream(in)
+      resultBuffer.addStream(shuffleObjId, in)
     }
     resultBuffer
   }

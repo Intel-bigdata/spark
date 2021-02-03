@@ -27,6 +27,7 @@ import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.Optional;
 
@@ -93,9 +94,12 @@ public class PlasmaShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
         @Override
         public Optional<WritableByteChannelWrapper> openChannelWrapper() throws IOException {
-            //TODO: will resolve it POAE7-771
-            throw new UnsupportedOperationException("WritableByteChannelWrapper is not implemented for " +
-                    "PMemShufflePartitionWriter");
+            if (partStream != null) {
+                PlasmaShufflePartitionWritableChannel partChannel = new PlasmaShufflePartitionWritableChannel(partStream);
+                return Optional.of(partChannel);
+            } else {
+                return Optional.empty();
+            }
         }
 
         @Override
@@ -109,17 +113,26 @@ public class PlasmaShuffleMapOutputWriter implements ShuffleMapOutputWriter {
         }
     }
 
-   //TODo: will implement it in POAE7-771.
     private class PlasmaShufflePartitionWritableChannel implements WritableByteChannelWrapper {
+       private OutputStream partStream = null;
+       private WritableByteChannel partChannel = null;
+       public PlasmaShufflePartitionWritableChannel(OutputStream partOutputStream){
+           partStream = partOutputStream;
+       }
 
         @Override
         public WritableByteChannel channel() {
-            return null;
+            if (partChannel == null) {
+                partChannel = Channels.newChannel(partStream);
+            }
+            return partChannel;
         }
 
         @Override
         public void close() throws IOException {
-
+            if (partChannel != null) {
+                partChannel.close();
+            }
         }
     }
 
