@@ -12,3 +12,4 @@ cmake -DCMAKE_INSTALL_PREFIX=/usr/local/ -DCMAKE_BUILD_TYPE=Release -DARROW_PLAS
 make -j$(nproc)
 sudo make install -j$(nproc)
 sudo cp /tmp/apache-arrow-2.0.0/cpp/release/release/libplasma_java.so /usr/local/lib/
+sudo cp /tmp/apache-arrow-2.0.0/cpp/release/release/libplasma_java.so /usr/lib/

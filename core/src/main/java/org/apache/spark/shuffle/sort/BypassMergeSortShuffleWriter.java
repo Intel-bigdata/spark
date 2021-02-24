@@ -25,6 +25,7 @@ import java.nio.channels.FileChannel;
 import java.util.Optional;
 import javax.annotation.Nullable;
 
+import org.apache.spark.shuffle.pmem.PlasmaBlockObjectWriter;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -95,6 +96,10 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
 
+  private boolean plasmaBackendEnabled;
+  private PlasmaBlockObjectWriter plasmaWriter;
+
+
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
    * and then call stop() with success = false if they get an exception, we want to make sure
@@ -108,7 +113,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       long mapId,
       SparkConf conf,
       ShuffleWriteMetricsReporter writeMetrics,
-      ShuffleExecutorComponents shuffleExecutorComponents) {
+      ShuffleExecutorComponents shuffleExecutorComponents,
+      boolean plasmaBackendEnabled) {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
@@ -121,10 +127,54 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
+    this.plasmaBackendEnabled = plasmaBackendEnabled;
   }
 
   @Override
   public void write(Iterator<Product2<K, V>> records) throws IOException {
+    if (plasmaBackendEnabled) {
+      writeToPlasma(records);
+    } else {
+      writeToDisk(records);
+    }
+  }
+
+  public void writeToPlasma(Iterator<Product2<K, V>> records) throws IOException {
+    assert (plasmaWriter == null);
+    ShuffleMapOutputWriter mapOutputWriter = shuffleExecutorComponents
+        .createMapOutputWriter(shuffleId, mapId, numPartitions);
+    try {
+      if (!records.hasNext()) {
+        mapStatus = MapStatus$.MODULE$.apply(
+            blockManager.shuffleServerId(), new long[numPartitions], mapId);
+        return;
+      }
+      final SerializerInstance serInstance = serializer.newInstance();
+      final Tuple2<TempShuffleBlockId, File> tempShuffleBlockIdPlusSpillingFile =
+          blockManager.diskBlockManager().createTempShuffleBlock();
+      final File file = tempShuffleBlockIdPlusSpillingFile._2();
+      final BlockId blockId = tempShuffleBlockIdPlusSpillingFile._1();
+      plasmaWriter = blockManager.getPlasmaWriter(blockId, file, serInstance);
+
+      while (records.hasNext()) {
+        final Product2<K, V> record = records.next();
+        final K key = record._1();
+        plasmaWriter.write(key, record._2());
+      }
+      mapStatus = MapStatus$.MODULE$.apply(
+          blockManager.shuffleServerId(), new long[numPartitions], mapId);
+    } catch (Exception e) {
+      try {
+        mapOutputWriter.abort(e);
+      } catch (Exception e2) {
+        logger.error("Failed to abort the writer after failing to write map output.", e2);
+        e.addSuppressed(e2);
+      }
+      throw e;
+    }
+  }
+
+  public void writeToDisk(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
     ShuffleMapOutputWriter mapOutputWriter = shuffleExecutorComponents
         .createMapOutputWriter(shuffleId, mapId, numPartitions);

@@ -36,13 +36,12 @@
   
   <dependencies>
     <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-plasma</artifactId>
-      <version>2.0.0</version>
-    </dependency>
-    <dependency>
       <groupId>com.thoughtworks.paranamer</groupId>
       <artifactId>paranamer</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-plasma</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.avro</groupId>

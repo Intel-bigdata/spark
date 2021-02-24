@@ -77,7 +77,7 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
       shuffleHandle,
       mapId = 1,
       context,
-      shuffleExecutorComponents)
+      shuffleExecutorComponents, false)
     writer.write(Iterator.empty)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 1)
@@ -94,7 +94,7 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
       shuffleHandle,
       mapId = 2,
       context,
-      shuffleExecutorComponents)
+      shuffleExecutorComponents, false)
     writer.write(records.toIterator)
     writer.stop(success = true)
     val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 2)

@@ -28,7 +28,8 @@ private[spark] class SortShuffleWriter[K, V, C](
     handle: BaseShuffleHandle[K, V, C],
     mapId: Long,
     context: TaskContext,
-    shuffleExecutorComponents: ShuffleExecutorComponents)
+    shuffleExecutorComponents: ShuffleExecutorComponents,
+    plasmaBackendEnabled: Boolean)
   extends ShuffleWriter[K, V] with Logging {
 
   private val dep = handle.dependency
