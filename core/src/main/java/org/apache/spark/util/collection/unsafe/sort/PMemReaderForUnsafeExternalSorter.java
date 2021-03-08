@@ -35,7 +35,7 @@ public final class PMemReaderForUnsafeExternalSorter extends UnsafeSorterIterato
         this.numRecordsRemaining = numRecords - position/2;
         this.taskMetrics = taskMetrics;
         int readBufferSize = SparkEnv.get() == null? 8 * 1024 * 1024 :
-                (int) SparkEnv.get().conf().get(package$.MODULE$.MEMORY_SPILL_PMEM_READ_BUFFERSIZE());
+                (int) (long) SparkEnv.get().conf().get(package$.MODULE$.MEMORY_SPILL_PMEM_READ_BUFFERSIZE());
         logger.info("PMem read buffer size is:" + Utils.bytesToString(readBufferSize));
         this.byteBuffer = ByteBuffer.wrap(new byte[readBufferSize]);
         byteBuffer.flip();
@@ -44,7 +44,6 @@ public final class PMemReaderForUnsafeExternalSorter extends UnsafeSorterIterato
 
     @Override
     public void loadNext() {
-        startTime = System.nanoTime();
         if (!byteBuffer.hasRemaining()) {
             boolean refilled = refill();
             if (!refilled) {
@@ -58,7 +57,6 @@ public final class PMemReaderForUnsafeExternalSorter extends UnsafeSorterIterato
             baseObject = arr;
         }
         byteBuffer.get(arr, 0, recordLength);
-        taskMetrics.incShuffleSpillReadTime(System.nanoTime() - startTime);
         numRecordsRemaining --;
     }
 

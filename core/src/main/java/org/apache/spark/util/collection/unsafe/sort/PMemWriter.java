@@ -95,36 +95,25 @@ public final class PMemWriter extends UnsafeSorterPMemSpillWriter {
                 long writeDuration = 0;
                 ExecutorService executorService = Executors.newSingleThreadExecutor();
                 Future<Long> future = executorService.submit(()->dumpPagesToPMem());
-                long startTime = System.nanoTime();
-                externalSorter.getInMemSorter().getSortedIterator();
-                taskMetrics.incSpillSortTime(System.nanoTime() - startTime);
+                inMemSorter.getSortedIterator();
                 try {
                     writeDuration = future.get();
                 } catch (InterruptedException | ExecutionException e) {
                     logger.error(e.getMessage());
                 }
                 executorService.shutdownNow();
-                startTime = System.nanoTime();
                 updateLongArray(inMemSorter.getArray(), totalRecordsWritten, 0);
-                taskMetrics.incShuffleSpillWriteTime(writeDuration
-                        + System.nanoTime() - startTime);
             } else if(!isSorted) {
-                taskMetrics.incShuffleSpillWriteTime(dumpPagesToPMem());
+                dumpPagesToPMem();
                 // get sorted iterator
-                long startTime = System.nanoTime();
-                externalSorter.getInMemSorter().getSortedIterator();
-                taskMetrics.incSpillSortTime(System.nanoTime() - startTime);
+                inMemSorter.getSortedIterator();
                 // update LongArray
-                startTime = System.nanoTime();
                 updateLongArray(inMemSorter.getArray(), totalRecordsWritten, 0);
-                taskMetrics.incShuffleSpillWriteTime(System.nanoTime() - startTime);
             } else {
-                taskMetrics.incShuffleSpillWriteTime(dumpPagesToPMem());
+                dumpPagesToPMem();
                 // get sorted iterator
-                long startTime = System.nanoTime();
                 assert(sortedIterator != null);
                 updateLongArray(inMemSorter.getArray(), totalRecordsWritten, sortedIterator.getPosition());
-                taskMetrics.incShuffleSpillWriteTime(System.nanoTime() - startTime);
             }
         } else {
             // fallback to disk spill
@@ -132,15 +121,13 @@ public final class PMemWriter extends UnsafeSorterPMemSpillWriter {
                 diskSpillWriter = new UnsafeSorterSpillWriter(
                         blockManager,
                         fileBufferSize,
-                        sortedIterator,
+                        isSorted? sortedIterator : inMemSorter.getSortedIterator(),
                         numberOfRecordsToWritten,
                         serializerManager,
                         writeMetrics,
                         taskMetrics);
             }
-            long startTime = System.nanoTime();
             diskSpillWriter.write(false);
-            taskMetrics.incShuffleSpillWriteTime(System.nanoTime() - startTime);
         }
     }
 
@@ -151,6 +138,7 @@ public final class PMemWriter extends UnsafeSorterPMemSpillWriter {
                 allocatedPMemPages.add(pMemBlock);
                 pageMap.put(page, pMemBlock);
             } else {
+                freeAllPMemPages();
                 pageMap.clear();
                 return false;
             }
@@ -160,6 +148,7 @@ public final class PMemWriter extends UnsafeSorterPMemSpillWriter {
             allocatedPMemPages.add(pMemPageForLongArray);
             pageMap.put(longArrayPage, pMemPageForLongArray);
         } else {
+            freeAllPMemPages();
             pageMap.clear();
             return false;
         }

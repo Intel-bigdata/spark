@@ -210,7 +210,6 @@ public class UnsafeSorterSpillWriter implements SpillWriterForUnsafeSorter{
   }
 
   public void write(boolean alreadyLoad) throws IOException {
-    long startTime = System.nanoTime();
     if (inMemIterator != null) {
       if (alreadyLoad) {
         final Object baseObject = inMemIterator.getBaseObject();
@@ -227,7 +226,6 @@ public class UnsafeSorterSpillWriter implements SpillWriterForUnsafeSorter{
       }
       close();
     }
-    taskMetrics.incShuffleSpillWriteTime(System.nanoTime() - startTime);
   }
 
   public UnsafeSorterSpillReader getReader(SerializerManager serializerManager,

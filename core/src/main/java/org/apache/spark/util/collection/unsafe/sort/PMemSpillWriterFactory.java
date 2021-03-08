@@ -53,11 +53,9 @@ public class PMemSpillWriterFactory {
                     writeMetrics,
                     taskMetrics);
         } else {
-            long startTime = System.nanoTime();
             if (sortedIterator == null) {
                 sortedIterator = externalSorter.getInMemSorter().getSortedIterator();
             }
-            taskMetrics.incSpillSortTime(System.nanoTime() - startTime);
             if (spillToPMEMEnabled && sortedIterator instanceof UnsafeInMemorySorter.SortedIterator){
 
                 if (writerType == PMemSpillWriterType.WRITE_SORTED_RECORDS_TO_PMEM) {

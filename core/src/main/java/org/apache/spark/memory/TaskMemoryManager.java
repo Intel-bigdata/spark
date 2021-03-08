@@ -433,7 +433,6 @@ public class TaskMemoryManager {
     synchronized (this) {
       pageNumber = allocatedPages.nextClearBit(0);
       if (pageNumber >= PAGE_TABLE_SIZE) {
-        releaseExtendedMemory(size);
         throw new IllegalStateException(
                 "Have already allocated a maximum of " + PAGE_TABLE_SIZE + " pages");
       }

@@ -351,10 +351,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    */
   public void cleanupResources() {
     synchronized (this) {
-      long startTime = System.nanoTime();
       freeSpills();
-      long duration = System.nanoTime() - startTime;
-      taskContext.taskMetrics().incShuffleSpillDeleteTime(duration);
       freeMemory();
       if (inMemSorter != null) {
         inMemSorter.free();

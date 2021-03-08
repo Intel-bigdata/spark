@@ -85,10 +85,7 @@ public class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Clo
         this.in = serializerManager.wrapStream(blockId, bs);
       }
       this.din = new DataInputStream(this.in);
-      long startTime = System.nanoTime();
       numRecords = numRecordsRemaining = din.readInt();
-      long duration = System.nanoTime() - startTime;
-      this.taskMetrics.incShuffleSpillReadTime(duration);
     } catch (IOException e) {
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
@@ -115,7 +112,6 @@ public class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Clo
     if (taskContext != null) {
       taskContext.killTaskIfInterrupted();
     }
-    long startTime = System.nanoTime();
     recordLength = din.readInt();
     keyPrefix = din.readLong();
     if (recordLength > arr.length) {
@@ -127,8 +123,6 @@ public class UnsafeSorterSpillReader extends UnsafeSorterIterator implements Clo
     if (numRecordsRemaining == 0) {
       close();
     }
-    long duration = System.nanoTime() - startTime;
-    taskMetrics.incShuffleSpillReadTime(duration);
   }
 
   @Override

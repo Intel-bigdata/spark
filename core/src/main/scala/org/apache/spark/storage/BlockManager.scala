@@ -18,7 +18,7 @@
 package org.apache.spark.storage
 
 import java.io._
-import java.lang.ref.{WeakReference, ReferenceQueue => JReferenceQueue}
+import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
@@ -31,9 +31,13 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
+
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.google.common.cache.CacheBuilder
+import com.intel.oap.common.unsafe.PersistentMemoryPlatform
+
 import org.apache.commons.io.IOUtils
+
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
@@ -175,6 +179,51 @@ private[spark] class BlockManager(
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
+
+  val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
+  var memExtensionEnabled = conf.getBoolean("spark.memory.pmem.extension.enabled", false)
+
+  var numaNodeId = conf.getInt("spark.executor.numa.id", -1)
+  val pmemInitialPaths = conf.get("spark.memory.pmem.initial.path", "").split(",")
+  val pmemInitialSize = conf.getSizeAsBytes("spark.memory.pmem.initial.size", 0L)
+  val pmemMode = conf.get("spark.memory.pmem.mode", "AppDirect")
+  val numNum = conf.getInt("spark.yarn.numa.num", 2)
+
+  if (memExtensionEnabled && pmemMode.equals("AppDirect")) {
+    if (!isDriver && pmemInitialPaths.size >= 1) {
+      if (numaNodeId == -1) {
+        numaNodeId = executorId.toInt
+      }
+      val path_postfix = File.separator + s"executor_${executorId}" + File.pathSeparator
+      var file = if (1 == pmemInitialPaths.size) {
+        new File(pmemInitialPaths(0) + path_postfix)
+      } else {
+        new File(pmemInitialPaths(numaNodeId % 2) + path_postfix)
+      }
+        
+      if (file.exists() && file.isFile) {
+        file.delete()
+      }
+
+      if (!file.exists()) {
+        file.mkdirs()
+      }
+
+      require(file.isDirectory(), "PMem directory is required for initialization")
+      PersistentMemoryPlatform.initialize(file.getAbsolutePath, pmemInitialSize, 0)
+      logInfo(s"Intel Optane PMem initialized with path:" +
+        s" ${file.getAbsolutePath}, size: ${pmemInitialSize} ")
+    }
+  } else if (memExtensionEnabled && pmemMode.equals("KMemDax")) {
+    if (!isDriver) {
+      if (numaNodeId == -1) {
+        numaNodeId = (executorId.toInt + 1) % 2
+      }
+      val daxNodeId = numaNodeId + numNum
+      PersistentMemoryPlatform.setNUMANode(String.valueOf(daxNodeId), String.valueOf(numaNodeId))
+      PersistentMemoryPlatform.initialize()
+    }
+  }
 
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
@@ -413,6 +462,7 @@ private[spark] class BlockManager(
       val allocator = level.memoryMode match {
         case MemoryMode.ON_HEAP => ByteBuffer.allocate _
         case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
+        case MemoryMode.PMEM => PersistentMemoryPlatform.allocateVolatileDirectBuffer _
       }
       blockData().toChunkedByteBuffer(allocator)
     }
@@ -1485,6 +1535,7 @@ private[spark] class BlockManager(
           val allocator = level.memoryMode match {
             case MemoryMode.ON_HEAP => ByteBuffer.allocate _
             case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
+            case MemoryMode.PMEM => PersistentMemoryPlatform.allocateVolatileDirectBuffer _
           }
           val putSucceeded = memoryStore.putBytes(blockId, diskData.size, level.memoryMode, () => {
             // https://issues.apache.org/jira/browse/SPARK-6076

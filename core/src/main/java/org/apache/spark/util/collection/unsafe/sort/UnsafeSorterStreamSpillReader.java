@@ -48,10 +48,7 @@ public class UnsafeSorterStreamSpillReader extends UnsafeSorterSpillReader {
             this.in = serializerManager.wrapStream(blockId, bs);
         }
         this.din = new DataInputStream(this.in);
-        long startTime = System.nanoTime();
         numRecords = numRecordsRemaining = din.readInt();
-        long duration = System.nanoTime() - startTime;
-        this.taskMetrics.incShuffleSpillReadTime(duration);
     } catch (IOException e) {
         Closeables.close(bs, /* swallowIOException = */ true);
         throw e;
