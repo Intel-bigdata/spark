@@ -76,7 +76,8 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       100, // initialSize - This will require ShuffleInMemorySorter to acquire at least 800 bytes
       1, // numPartitions
       conf,
-      new ShuffleWriteMetrics)
+      new ShuffleWriteMetrics,
+      false)
     val inMemSorter = {
       val field = sorter.getClass.getDeclaredField("inMemSorter")
       field.setAccessible(true)

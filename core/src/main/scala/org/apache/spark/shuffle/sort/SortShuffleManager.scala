@@ -20,13 +20,13 @@ package org.apache.spark.shuffle.sort
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.config.SHUFFLE_IO_PLUGIN_CLASS
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleExecutorComponents}
-import org.apache.spark.shuffle.pmem.PlasmaShuffleBlockResolver
+import org.apache.spark.shuffle.pmem.{PlasmaShuffleBlockResolver, PlasmaShuffleDataIO}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -90,7 +90,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   private lazy val shuffleExecutorComponents = loadShuffleExecutorComponents(conf)
 
-  val plasmaBackendEnabled = conf.getBoolean("spark.shuffle.plasma.enabled", false)
+  val plasmaBackendEnabled = conf.get(SHUFFLE_IO_PLUGIN_CLASS)
+    .equals(classOf[PlasmaShuffleDataIO].getName)
 
   override val shuffleBlockResolver = if (plasmaBackendEnabled) {
     new PlasmaShuffleBlockResolver(conf)
